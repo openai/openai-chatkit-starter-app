@@ -1,6 +1,10 @@
 import { WORKFLOW_ID } from "@/lib/config";
+import { config as dotenvLoad } from "dotenv";
 
-export const runtime = "edge";
+if (process.env.NODE_ENV !== "production") {
+  // Load .env.local data over preset env variables
+  dotenvLoad({ path: ".env.local", override: true });
+}
 
 interface CreateSessionRequestBody {
   workflow?: { id?: string | null } | null;
