@@ -1,0 +1,26 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    container_name: nextjs-dev
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.local
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      - NODE_ENV=development
+      # Ensure Node.js can resolve external APIs
+      - NODE_TLS_REJECT_UNAUTHORIZED=0  # Only for dev if SSL issues
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    # Add this to use host network stack (best for local dev)
+    network_mode: bridge
+    stdin_open: true
+    tty: true
+    restart: unless-stopped

@@ -56,6 +56,57 @@ Visit `http://localhost:3000` and start chatting. Use the prompts on the start s
 npm run build
 ```
 
+### Run with Docker
+
+Build the production image and run it locally:
+
+```bash
+docker build -t chatkit-app .
+docker run --rm -p 3000:3000 --env-file .env.local chatkit-app
+```
+
+Or pass env vars explicitly:
+
+```bash
+docker run --rm -p 3000:3000 \
+  -e OPENAI_API_KEY="..." \
+  -e NEXT_PUBLIC_CHATKIT_WORKFLOW_ID="wf_..." \
+  chatkit-app
+```
+
+Visit `http://localhost:3000`.
+
+### Mount env file, then start service
+
+If you prefer mounting `.env.local` rather than passing `--env-file`, the image has an entrypoint that reads `/app/.env.local` before starting:
+
+```bash
+docker run --rm -p 3000:3000 \
+  -v $(pwd)/.env.local:/app/.env.local:ro \
+  chatkit-app
+```
+
+### Develop inside Docker (hot reload)
+
+Use the local development setup with bind mounts and your local env:
+
+```bash
+# Create your environment file
+cp .env.example .env.local
+# Edit .env.local with your OPENAI_API_KEY and NEXT_PUBLIC_CHATKIT_WORKFLOW_ID
+
+# Start the development container
+docker-compose -f docker-compose.local.yml down
+docker-compose -f docker-compose.local.yml up --build
+```
+
+This runs `npm run dev` in a container with:
+- Hot reload enabled (source code mounted from host)
+- DNS configured for external API access
+- Port 3000 exposed to host
+- Environment variables loaded from `.env.local`
+
+Visit `http://localhost:3000` and start chatting. Your code changes will trigger hot reload inside the container.
 Before deploying your app, you need to verify the domain by adding it to the [Domain allowlist](https://platform.openai.com/settings/organization/security/domain-allowlist) on your dashboard.
 
 ## Customization Tips

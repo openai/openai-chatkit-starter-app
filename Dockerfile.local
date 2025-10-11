@@ -1,0 +1,21 @@
+FROM node:20-bookworm-slim
+WORKDIR /app
+
+# Copy package files first for better layer caching
+COPY package*.json ./
+RUN npm install
+
+# Copy source code
+COPY . .
+
+# Set development environment
+ENV NODE_ENV=development
+
+# Copy entrypoint script
+COPY ./entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+EXPOSE 3000
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["npm", "run", "dev"]
