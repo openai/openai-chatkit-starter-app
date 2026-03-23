@@ -33,3 +33,42 @@ same project and organization.
 
 - UI: `frontend/src/components/ChatKitPanel.tsx`
 - Session logic: `backend/app/main.py`
+
+## Deploy with Docker
+
+### Build
+
+```bash
+docker build \
+  --build-arg VITE_CHATKIT_WORKFLOW_ID=wf_xxxxx \
+  -t managed-chatkit .
+```
+
+### Run
+
+```bash
+docker run -d \
+  -e OPENAI_API_KEY=sk-proj-xxxxx \
+  -p 8000:8000 \
+  --name managed-chatkit \
+  managed-chatkit
+```
+
+The app will be available at `http://localhost:8000`.
+
+### Environment variables
+
+| Variable | Build-time | Runtime | Description |
+|----------|------------|---------|-------------|
+| `VITE_CHATKIT_WORKFLOW_ID` | Required | Required | Your ChatKit workflow ID |
+| `OPENAI_API_KEY` | - | Required | OpenAI API key |
+| `CHATKIT_API_BASE` | - | Optional | ChatKit API base URL |
+
+### Production deployment
+
+For production, pass `OPENAI_API_KEY` via your orchestrator's secret management:
+
+- **Kubernetes**: Use Secrets
+- **Cloud Run**: Use `--set-secrets`
+- **ECS**: Use Task Definition secrets
+- **Azure Container Apps**: Use secret references
