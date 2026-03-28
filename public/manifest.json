@@ -1,0 +1,17 @@
+{
+  "name": "AI Chat",
+  "short_name": "AI Chat",
+  "description": "iOS Optimized AI Assistant",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#007aff",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
