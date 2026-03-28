@@ -67,10 +67,10 @@ async def create_session(request: Request) -> JSONResponse:
 
     payload = parse_json(upstream)
     if not upstream.is_success:
-        message = None
-        if isinstance(payload, Mapping):
-            message = payload.get("error")
-        message = message or upstream.reason_phrase or "Failed to create session"
+        message = resolve_error_message(
+            payload,
+            fallback=upstream.reason_phrase or "Failed to create session",
+        )
         return respond({"error": message}, upstream.status_code, cookie_value)
 
     client_secret = None
@@ -91,6 +91,29 @@ async def create_session(request: Request) -> JSONResponse:
         200,
         cookie_value,
     )
+
+
+def resolve_error_message(payload: Mapping[str, Any], fallback: str) -> str:
+    """Return a human-readable error string from an upstream payload."""
+    raw_error = payload.get("error")
+
+    if isinstance(raw_error, str) and raw_error.strip():
+        return raw_error.strip()
+
+    if isinstance(raw_error, Mapping):
+        message = raw_error.get("message")
+        if isinstance(message, str) and message.strip():
+            return message.strip()
+
+        code = raw_error.get("code")
+        if isinstance(code, str) and code.strip():
+            return code.strip()
+
+    top_level_message = payload.get("message")
+    if isinstance(top_level_message, str) and top_level_message.strip():
+        return top_level_message.strip()
+
+    return fallback
 
 
 def respond(
