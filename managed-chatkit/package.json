@@ -6,7 +6,7 @@
     "frontend": "npm --prefix frontend install && npm --prefix frontend run dev",
     "frontend:build": "npm --prefix frontend install && npm --prefix frontend run build",
     "frontend:lint": "npm --prefix frontend install && npm --prefix frontend run lint",
-    "backend": "./backend/scripts/run.sh"
+    "backend": "bash -lc './backend/scripts/run.sh'"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
