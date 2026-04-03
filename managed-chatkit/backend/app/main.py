@@ -10,13 +10,16 @@ from typing import Any, Mapping
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 DEFAULT_CHATKIT_BASE = "https://api.openai.com"
 SESSION_COOKIE_NAME = "chatkit_session_id"
 SESSION_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30  # 30 days
 
 app = FastAPI(title="Managed ChatKit Session API")
+
+app.mount("/static", StaticFiles(directory="dist/assets"), name="static")
 
 app.add_middleware(
     CORSMiddleware,
@@ -164,3 +167,12 @@ def parse_json(response: httpx.Response) -> Mapping[str, Any]:
         return parsed if isinstance(parsed, Mapping) else {}
     except (json.JSONDecodeError, httpx.DecodingError):
         return {}
+
+
+@app.get("/{full_path:path}")
+async def serve_spa(full_path: str) -> HTMLResponse:
+    index_path = os.path.join("dist", "index.html")
+    if os.path.exists(index_path):
+        with open(index_path, "r") as f:
+            return HTMLResponse(content=f.read())
+    return HTMLResponse(content="<h1>Not Found</h1>", status_code=404)
