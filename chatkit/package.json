@@ -4,7 +4,7 @@
   "scripts": {
     "dev": "concurrently --kill-others-on-fail --names backend,frontend \"npm run backend\" \"npm run frontend\"",
     "frontend": "npm --prefix frontend install && npm --prefix frontend run dev",
-    "backend": "./backend/scripts/run.sh"
+    "backend": "node -e \"require('child_process').execSync(process.platform === 'win32' ? '.\\\\backend\\\\scripts\\\\run.bat' : './backend/scripts/run.sh', {stdio: 'inherit'})\""
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
