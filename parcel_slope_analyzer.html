@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TruTerra — Parcel Slope Analyzer</title>
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet">
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Token overlay ─────────────────────────────────────────────────────── */
+    #token-overlay {
+      position: fixed; inset: 0;
+      background: #0d1117;
+      display: flex; align-items: center; justify-content: center;
+      z-index: 9999;
+    }
+    .tk-card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 12px;
+      padding: 32px 36px;
+      max-width: 440px; width: 92%;
+    }
+    .tk-logo { font-size: 20px; font-weight: 700; color: #58a6ff; margin-bottom: 4px; }
+    .tk-sub  { font-size: 12px; color: #8b949e; margin-bottom: 20px; }
+    .tk-note {
+      background: #161b22;
+      border: 1px solid #3d2a00;
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-size: 11px; color: #d29922;
+      margin-bottom: 16px; line-height: 1.5;
+    }
+    .tk-label { font-size: 11px; color: #8b949e; margin-bottom: 6px; display: block; }
+    .tk-input {
+      width: 100%; padding: 9px 12px;
+      border: 1px solid #30363d; border-radius: 6px;
+      background: #0d1117; color: #e6edf3;
+      font-size: 12px; font-family: monospace;
+      margin-bottom: 12px;
+    }
+    .tk-input:focus { outline: none; border-color: #58a6ff; }
+    .tk-btn {
+      width: 100%; padding: 10px;
+      background: #238636; color: #fff;
+      border: none; border-radius: 6px;
+      font-size: 13px; font-weight: 600;
+      cursor: pointer;
+    }
+    .tk-btn:hover { background: #2ea043; }
+    .tk-session {
+      margin-top: 10px;
+      font-size: 11px; color: #8b949e; text-align: center;
+    }
+    .tk-session a { color: #58a6ff; cursor: pointer; }
+
+    /* ── App layout ────────────────────────────────────────────────────────── */
+    #app { display: none; height: 100vh; flex-direction: row; position: relative; }
+
+    #map { flex: 1; position: relative; height: 100%; }
+    .sidebar {
+      width: 310px;
+      background: #161b22;
+      border-left: 1px solid #21262d;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    /* ── Sidebar header ─────────────────────────────────────────────────────── */
+    .s-head {
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid #21262d;
+      flex-shrink: 0;
+    }
+    .s-logo { font-size: 15px; font-weight: 700; color: #58a6ff; }
+    .s-tagline { font-size: 10px; color: #8b949e; margin-top: 1px; }
+
+    /* ── Scrollable body ────────────────────────────────────────────────────── */
+    .s-body { flex: 1; overflow-y: auto; }
+
+    /* ── Panel ──────────────────────────────────────────────────────────────── */
+    .panel { padding: 12px 14px; border-bottom: 1px solid #21262d; }
+    .p-title {
+      font-size: 9px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.9px;
+      color: #8b949e; margin-bottom: 9px;
+    }
+
+    /* click instruction */
+    .click-hint {
+      font-size: 12px; color: #8b949e; text-align: center;
+      padding: 6px 0;
+    }
+    .click-hint strong { color: #e6edf3; display: block; margin-bottom: 3px; }
+
+    /* ── Info rows ──────────────────────────────────────────────────────────── */
+    .info-row { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+    .ir-label { font-size: 11px; color: #8b949e; white-space: nowrap; }
+    .ir-val   { font-size: 11px; color: #e6edf3; text-align: right; font-family: 'SF Mono', monospace; }
+
+    /* ── Jurisdiction badge ─────────────────────────────────────────────────── */
+    .juris-badge {
+      display: inline-block;
+      font-size: 11px; font-weight: 600;
+      padding: 2px 8px; border-radius: 20px;
+      margin-bottom: 6px;
+    }
+    .juris-gatlinburg  { background: #1f3d2a; color: #3fb950; border: 1px solid #238636; }
+    .juris-sevierville { background: #1a2a4a; color: #58a6ff; border: 1px solid #1f6feb; }
+    .juris-county      { background: #2a2320; color: #d29922; border: 1px solid #9e6a03; }
+    .juris-unknown     { background: #21262d; color: #8b949e; border: 1px solid #30363d; }
+
+    .juris-fallback-note {
+      font-size: 10px; color: #d29922;
+      background: #2a2118; border: 1px solid #9e6a03;
+      border-radius: 4px; padding: 5px 8px; margin-top: 6px;
+      line-height: 1.4;
+    }
+
+    /* ── Metric grid ────────────────────────────────────────────────────────── */
+    .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .metric-card {
+      background: #0d1117;
+      border: 1px solid #21262d;
+      border-radius: 7px;
+      padding: 8px 10px;
+    }
+    .mc-val   { font-size: 18px; font-weight: 700; color: #58a6ff; line-height: 1; }
+    .mc-label { font-size: 10px; color: #8b949e; margin-top: 3px; }
+
+    /* highlight for "over 30%" card */
+    .metric-card.critical .mc-val { color: #f78166; }
+
+    /* ── Slope bands ────────────────────────────────────────────────────────── */
+    .band-row { margin-bottom: 7px; }
+    .band-header { display: flex; justify-content: space-between; margin-bottom: 3px; }
+    .band-label { font-size: 10px; color: #e6edf3; }
+    .band-pct   { font-size: 10px; color: #8b949e; }
+    .band-track {
+      height: 6px; background: #21262d;
+      border-radius: 3px; overflow: hidden;
+    }
+    .band-fill { height: 100%; border-radius: 3px; transition: width 0.4s; }
+
+    /* ── Critical trigger callout ───────────────────────────────────────────── */
+    .trigger-callout {
+      background: #2d1b1b;
+      border: 1px solid #6e2727;
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 11px; color: #f78166;
+      margin-top: 6px; line-height: 1.4;
+    }
+
+    /* ── Status log ─────────────────────────────────────────────────────────── */
+    .log-wrap { max-height: 200px; overflow-y: auto; }
+    .log-item {
+      display: flex; align-items: flex-start; gap: 5px;
+      font-size: 10px; padding: 2px 0; line-height: 1.4;
+    }
+    .log-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; margin-top: 3px; }
+    .log-item.info    .log-dot { background: #8b949e; }
+    .log-item.running .log-dot { background: #58a6ff; animation: blink 0.8s infinite; }
+    .log-item.success .log-dot { background: #3fb950; }
+    .log-item.warn    .log-dot { background: #d29922; }
+    .log-item.error   .log-dot { background: #f78166; }
+    .log-item.info    { color: #8b949e; }
+    .log-item.running { color: #79c0ff; }
+    .log-item.success { color: #56d364; }
+    .log-item.warn    { color: #e3b341; }
+    .log-item.error   { color: #ff7b72; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+
+    /* ── Disclaimer ─────────────────────────────────────────────────────────── */
+    .disclaimer {
+      font-size: 10px; color: #8b949e; line-height: 1.5;
+    }
+    .disclaimer strong { color: #d29922; }
+
+    /* ── Map hint overlay ───────────────────────────────────────────────────── */
+    #map-hint {
+      position: absolute; top: 12px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(13,17,23,0.88);
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 8px 16px;
+      font-size: 12px; color: #e6edf3;
+      pointer-events: none;
+      z-index: 10;
+      transition: opacity 0.3s;
+    }
+    #map-hint.hidden { opacity: 0; }
+  </style>
+</head>
+<body>
+
+<!-- ── Token overlay ─────────────────────────────────────────────────────────── -->
+<div id="token-overlay">
+  <div class="tk-card">
+    <div class="tk-logo">TruTerra</div>
+    <div class="tk-sub">Parcel Slope Analyzer — Sevier County, TN</div>
+    <div class="tk-note">
+      Use your Mapbox <strong>public</strong> token (pk.eyJ1…) only.<br>
+      Secret tokens (sk.) must never be used in browser code.
+    </div>
+    <label class="tk-label" for="tk-input">Mapbox Public Token</label>
+    <input id="tk-input" class="tk-input" type="text"
+           placeholder="pk.eyJ1…" autocomplete="off" spellcheck="false">
+    <button class="tk-btn" onclick="applyToken()">Load Map →</button>
+    <div class="tk-session" id="tk-session" style="display:none">
+      Token restored from session &mdash; <a onclick="clearToken()">change</a>
+    </div>
+  </div>
+</div>
+
+<!-- ── App ───────────────────────────────────────────────────────────────────── -->
+<div id="app">
+  <div id="map"></div>
+  <div id="map-hint">Click any parcel to analyze slope</div>
+
+  <div class="sidebar">
+    <div class="s-head">
+      <div class="s-logo">TruTerra</div>
+      <div class="s-tagline">Parcel Slope Analyzer · Sevier County TN</div>
+    </div>
+
+    <div class="s-body">
+
+      <!-- Parcel info -->
+      <div class="panel" id="panel-parcel">
+        <div class="p-title">Selected Parcel</div>
+        <div id="parcel-content">
+          <div class="click-hint">
+            <strong>Click a parcel on the map</strong>
+            Zoom in to see parcel boundaries
+          </div>
+        </div>
+      </div>
+
+      <!-- Jurisdiction -->
+      <div class="panel" id="panel-juris" style="display:none">
+        <div class="p-title">Jurisdiction &amp; Profile</div>
+        <div id="juris-content"></div>
+      </div>
+
+      <!-- Metrics -->
+      <div class="panel" id="panel-metrics" style="display:none">
+        <div class="p-title">Slope Metrics</div>
+        <div class="metric-grid" id="metric-grid"></div>
+      </div>
+
+      <!-- Slope bands -->
+      <div class="panel" id="panel-bands" style="display:none">
+        <div class="p-title">Slope Band Breakdown</div>
+        <div id="bands-content"></div>
+      </div>
+
+      <!-- Status log -->
+      <div class="panel">
+        <div class="p-title">Status</div>
+        <div class="log-wrap"><div id="log"></div></div>
+      </div>
+
+      <!-- Disclaimers -->
+      <div class="panel disclaimer">
+        <strong>Planning-grade screen only.</strong> Use true raster zonal statistics
+        for final slope determinations.<br><br>
+        This tool is not a survey, engineering report, zoning determination, or
+        permit approval.
+      </div>
+
+    </div><!-- /.s-body -->
+  </div><!-- /.sidebar -->
+</div><!-- /#app -->
+
+<script>
+'use strict';
+
+// ── Data sources ───────────────────────────────────────────────────────────────
+const PARCELS_FS   = 'https://services3.arcgis.com/cYPAijXv24o8BjFq/arcgis/rest/services/Parcel/FeatureServer/0';
+const CITY_LIMITS  = 'https://services1.arcgis.com/Qu4yM4JJvNoC2GKw/arcgis/rest/services/City_Limits_Sevier_County_TN/FeatureServer/0';
+const EPQS_BASE    = 'https://epqs.nationalmap.gov/v1/json';
+const GRID_SIZE    = 10;     // 10×10 = 100 sample points
+const LOAD_ZOOM    = 13;     // minimum zoom to show background parcel outlines
+
+// ── Jurisdiction-specific slope band profiles ──────────────────────────────────
+const SLOPE_PROFILES = {
+  sevierCounty: {
+    key:  'sevierCounty',
+    name: 'Sevier County / Unincorporated',
+    bands: [
+      { min: 0,  max: 15,       label: '<15% — Low Slope',        color: '#238636' },
+      { min: 15, max: 30,       label: '15–30% — Moderate Slope', color: '#9e6a03' },
+      { min: 30, max: 50,       label: '30–50% — Critical Slope', color: '#da3633' },
+      { min: 50, max: Infinity, label: '50%+ — Severe Slope',     color: '#6e1b1b' },
+    ],
+    criticalThreshold: 30,
+    criticalLabel: 'critical-slope territory',
+  },
+  sevierville: {
+    key:  'sevierville',
+    name: 'Sevierville',
+    bands: [
+      { min: 0,  max: 15,       label: '<15% — Low Slope',        color: '#238636' },
+      { min: 15, max: 30,       label: '15–30% — Moderate Slope', color: '#9e6a03' },
+      { min: 30, max: 50,       label: '30–50% — Critical Slope', color: '#da3633' },
+      { min: 50, max: Infinity, label: '50%+ — Severe Slope',     color: '#6e1b1b' },
+    ],
+    criticalThreshold: 30,
+    criticalLabel: 'critical-slope territory',
+  },
+  gatlinburg: {
+    key:  'gatlinburg',
+    name: 'Gatlinburg',
+    bands: [
+      { min: 0,  max: 20,       label: '0–19% — Base Slope Tier',              color: '#238636' },
+      { min: 20, max: 30,       label: '20–29% — Elevated Slope Tier',         color: '#9e6a03' },
+      { min: 30, max: 50,       label: '30–49% — Geotech / Critical Threshold', color: '#da3633' },
+      { min: 50, max: Infinity, label: '50%+ — Highest Slope Tier',            color: '#6e1b1b' },
+    ],
+    criticalThreshold: 30,
+    criticalLabel: 'geotech-trigger territory',
+  },
+};
+
+// ── State ──────────────────────────────────────────────────────────────────────
+let TOKEN = '';
+let map   = null;
+let bgLoadTimer = null;
+let analysisInProgress = false;
+
+// ── Token management ───────────────────────────────────────────────────────────
+function applyToken() {
+  const val = document.getElementById('tk-input').value.trim();
+  if (!val) { alert('Please enter a Mapbox public token.'); return; }
+  if (val.startsWith('sk.')) {
+    alert('Secret tokens (sk.) must not be used in browser code.\nPlease enter your pk. public token.');
+    return;
+  }
+  TOKEN = val;
+  sessionStorage.setItem('truterra_pk', val);
+  launchApp();
+}
+
+function clearToken() {
+  sessionStorage.removeItem('truterra_pk');
+  location.reload();
+}
+
+function launchApp() {
+  document.getElementById('token-overlay').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  requestAnimationFrame(() => requestAnimationFrame(() => initMap()));
+}
+
+// ── Map initialisation ─────────────────────────────────────────────────────────
+function initMap() {
+  mapboxgl.accessToken = TOKEN;
+  map = new mapboxgl.Map({
+    container: 'map',
+    style: 'mapbox://styles/mapbox/satellite-streets-v12',
+    center: [-83.523, 35.868],
+    zoom: 12,
+  });
+
+  map.addControl(new mapboxgl.NavigationControl(), 'top-left');
+  map.getCanvas().style.cursor = 'crosshair';
+
+  map.on('load', () => {
+    log('Map loaded — click any parcel to begin', 'info');
+    loadBgParcels();
+  });
+
+  // Background parcel outlines on pan/zoom
+  map.on('moveend', () => {
+    clearTimeout(bgLoadTimer);
+    bgLoadTimer = setTimeout(loadBgParcels, 400);
+  });
+
+  map.on('click', handleClick);
+}
+
+// ── Background parcel outlines (visual reference) ──────────────────────────────
+async function loadBgParcels() {
+  if (!map || map.getZoom() < LOAD_ZOOM) {
+    clearSource('bg-parcels');
+    return;
+  }
+  const b = map.getBounds();
+  try {
+    const data = await arcgisQuery(PARCELS_FS, {
+      geometry: `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`,
+      geometryType: 'esriGeometryEnvelope',
+      inSR: '4326',
+      spatialRel: 'esriSpatialRelIntersects',
+      outFields: 'OBJECTID',
+      outSR: '4326',
+      returnGeometry: 'true',
+      resultRecordCount: '600',
+      f: 'geojson',
+    });
+    setGeoJSONSource('bg-parcels', data,
+      () => {
+        map.addLayer({ id: 'bg-outline', type: 'line', source: 'bg-parcels',
+          paint: { 'line-color': '#e6edf3', 'line-width': 0.6, 'line-opacity': 0.35 } });
+      }
+    );
+  } catch { /* silently ignore — background layer only */ }
+}
+
+// ── Main click handler ─────────────────────────────────────────────────────────
+async function handleClick(e) {
+  if (analysisInProgress) return;
+  analysisInProgress = true;
+
+  clearLog();
+  hideResultPanels();
+  document.getElementById('map-hint').classList.add('hidden');
+
+  const { lng, lat } = e.lngLat;
+
+  try {
+    // 1 — Find parcel
+    log('Querying ArcGIS parcel layer…', 'running');
+    const parcel = await queryParcelAtPoint(lng, lat);
+    if (!parcel) {
+      log('No parcel found at clicked location', 'warn');
+      return;
+    }
+    const pid = parcel.properties.GISLINK || parcel.properties.PIN || parcel.properties.OBJECTID || '—';
+    log(`Parcel found: ${pid}`, 'success');
+
+    // 2 — Detect jurisdiction
+    log('Detecting jurisdiction…', 'running');
+    const juris = await detectJurisdiction(lng, lat);
+    const profile = SLOPE_PROFILES[juris.profileKey];
+    log(`Jurisdiction: ${profile.name}`, 'success');
+
+    // 3 — Highlight parcel on map
+    highlightParcel(parcel);
+    addClickMarker(lng, lat);
+
+    // 4 — Show parcel attributes
+    renderParcelInfo(parcel, profile, juris);
+
+    // 5 — Sample elevation
+    const bbox = featureBbox(parcel);
+    log(`Sampling ${GRID_SIZE}×${GRID_SIZE} grid via USGS 3DEP EPQS…`, 'running');
+    const { grid, lngs, lats, mask } = await sampleElevGrid(bbox, parcel.geometry);
+
+    const interiorCount = mask.filter(Boolean).length;
+    if (interiorCount < 4) {
+      log(`Only ${interiorCount} interior samples — parcel may be too small for this grid`, 'warn');
+    } else {
+      log(`${interiorCount} interior samples collected`, 'success');
+    }
+
+    // 6 — Compute slope
+    log('Computing slope metrics…', 'running');
+    const metrics = computeSlopes(grid, lngs, lats, mask);
+
+    if (metrics.interior.length === 0) {
+      log('No valid interior samples — cannot compute slope', 'error');
+      return;
+    }
+
+    log(`Avg: ${metrics.avgPct.toFixed(1)}% (${metrics.avgDeg.toFixed(1)}°)  Max: ${metrics.maxPct.toFixed(1)}%`, 'success');
+    log(`Over 30% slope: ${metrics.pctOver30.toFixed(1)}% of parcel`, 'success');
+
+    // 7 — Render results
+    renderJurisdiction(juris, profile);
+    renderMetrics(metrics, profile);
+    renderBands(metrics, profile);
+    renderHeatmap(metrics.points);
+
+  } catch (err) {
+    log(`Error: ${err.message}`, 'error');
+    console.error(err);
+  } finally {
+    analysisInProgress = false;
+  }
+}
+
+// ── ArcGIS helpers ─────────────────────────────────────────────────────────────
+async function arcgisQuery(url, params) {
+  const p = new URLSearchParams(params);
+  const res = await fetch(`${url}/query?${p}`, { signal: AbortSignal.timeout(25000) });
+  if (!res.ok) throw new Error(`ArcGIS HTTP ${res.status}`);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+  return data;
+}
+
+async function queryParcelAtPoint(lng, lat) {
+  const data = await arcgisQuery(PARCELS_FS, {
+    geometry: JSON.stringify({ x: lng, y: lat, spatialReference: { wkid: 4326 } }),
+    geometryType: 'esriGeometryPoint',
+    inSR: '4326',
+    spatialRel: 'esriSpatialRelIntersects',
+    outFields: '*',
+    outSR: '4326',
+    returnGeometry: 'true',
+    resultRecordCount: '1',
+    f: 'geojson',
+  });
+  return data.features?.[0] ?? null;
+}
+
+async function detectJurisdiction(lng, lat) {
+  try {
+    const data = await arcgisQuery(CITY_LIMITS, {
+      geometry: JSON.stringify({ x: lng, y: lat, spatialReference: { wkid: 4326 } }),
+      geometryType: 'esriGeometryPoint',
+      inSR: '4326',
+      spatialRel: 'esriSpatialRelIntersects',
+      outFields: '*',
+      returnGeometry: 'false',
+      resultRecordCount: '1',
+      f: 'json',
+    });
+
+    if (data.features?.length) {
+      const a   = data.features[0].attributes || {};
+      const raw = (a.NAME || a.CITY_NAME || a.CITYNAME || a.JURIS || a.LABEL || '').toUpperCase();
+      if (raw.includes('GATLINBURG'))  return { profileKey: 'gatlinburg',  displayName: 'Gatlinburg',                confirmed: true };
+      if (raw.includes('SEVIERVILLE')) return { profileKey: 'sevierville', displayName: 'Sevierville',               confirmed: true };
+      if (raw)                          return { profileKey: 'sevierCounty', displayName: raw,                        confirmed: true };
+    }
+    // No city hit — unincorporated
+    return { profileKey: 'sevierCounty', displayName: 'Sevier County / Unincorporated', confirmed: true };
+
+  } catch (e) {
+    console.warn('Jurisdiction query failed:', e.message);
+    return { profileKey: 'sevierCounty', displayName: 'Sevier County', confirmed: false, fallback: true };
+  }
+}
+
+// ── USGS 3DEP EPQS ─────────────────────────────────────────────────────────────
+async function fetchElev(lng, lat) {
+  try {
+    const url = `${EPQS_BASE}?x=${lng}&y=${lat}&wkid=4326&units=Meters&includeDate=false`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) return null;
+    const d = await res.json();
+    const v = d.value ?? d.elevation;
+    if (v == null || v <= -999999) return null;
+    return parseFloat(v);
+  } catch { return null; }
+}
+
+async function sampleElevGrid(bbox, geometry) {
+  const [w, s, e, n] = bbox;
+  const N = GRID_SIZE;
+  const lngs = Array.from({ length: N }, (_, i) => w + (e - w) * i / (N - 1));
+  const lats = Array.from({ length: N }, (_, i) => s + (n - s) * i / (N - 1));
+
+  // Pre-compute interior mask
+  const mask = [];
+  for (let r = 0; r < N; r++)
+    for (let c = 0; c < N; c++)
+      mask.push(ptInGeometry(lngs[c], lats[r], geometry));
+
+  // Fetch all elevations in batches of 20 (parallel within batch)
+  const BATCH = 20;
+  const flat  = new Array(N * N).fill(null);
+  for (let start = 0; start < N * N; start += BATCH) {
+    const jobs = [];
+    for (let i = start; i < Math.min(start + BATCH, N * N); i++) {
+      const r = Math.floor(i / N), c = i % N;
+      jobs.push(fetchElev(lngs[c], lats[r]).then(v => ({ i, v })));
+    }
+    const res = await Promise.all(jobs);
+    res.forEach(({ i, v }) => { flat[i] = v; });
+    if (start + BATCH < N * N)
+      await new Promise(ok => setTimeout(ok, 40));
+  }
+
+  // Reshape to 2D grid[row][col]
+  const grid = Array.from({ length: N }, (_, r) => flat.slice(r * N, (r + 1) * N));
+  return { grid, lngs, lats, mask };
+}
+
+// ── Point-in-polygon (ray casting) ────────────────────────────────────────────
+function ptInRing(px, py, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0], yi = ring[i][1];
+    const xj = ring[j][0], yj = ring[j][1];
+    if ((yi > py) !== (yj > py) && px < (xj - xi) * (py - yi) / (yj - yi) + xi)
+      inside = !inside;
+  }
+  return inside;
+}
+
+function ptInGeometry(lng, lat, geom) {
+  if (!geom) return false;
+  if (geom.type === 'Polygon') {
+    let inside = ptInRing(lng, lat, geom.coordinates[0]);
+    for (let h = 1; h < geom.coordinates.length; h++)
+      if (ptInRing(lng, lat, geom.coordinates[h])) inside = false;
+    return inside;
+  }
+  if (geom.type === 'MultiPolygon') {
+    return geom.coordinates.some(poly => {
+      let inside = ptInRing(lng, lat, poly[0]);
+      for (let h = 1; h < poly.length; h++)
+        if (ptInRing(lng, lat, poly[h])) inside = false;
+      return inside;
+    });
+  }
+  return false;
+}
+
+// ── Slope computation ──────────────────────────────────────────────────────────
+function mPerDeg(lat) {
+  const mLat = 111319.9;
+  return { mLat, mLng: mLat * Math.cos(lat * Math.PI / 180) };
+}
+
+function computeSlopes(grid, lngs, lats, mask) {
+  const N = grid.length;
+  const points = [];
+
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      const elev = grid[r][c];
+      if (elev == null) continue;
+
+      const { mLat, mLng } = mPerDeg(lats[r]);
+
+      // dz/dx — east–west gradient
+      let dzdx;
+      if      (c === 0)   dzdx = grid[r][c+1]   != null ? (grid[r][c+1] - elev)             / ((lngs[c+1] - lngs[c]) * mLng)   : 0;
+      else if (c === N-1) dzdx = grid[r][c-1]   != null ? (elev - grid[r][c-1])             / ((lngs[c] - lngs[c-1]) * mLng)   : 0;
+      else                dzdx = (grid[r][c-1] != null && grid[r][c+1] != null)
+                                   ? (grid[r][c+1] - grid[r][c-1]) / ((lngs[c+1] - lngs[c-1]) * mLng)
+                                   : 0;
+
+      // dz/dy — north–south gradient
+      let dzdy;
+      if      (r === 0)   dzdy = grid[r+1]?.[c] != null ? (grid[r+1][c] - elev)             / ((lats[r+1] - lats[r]) * mLat)   : 0;
+      else if (r === N-1) dzdy = grid[r-1]?.[c] != null ? (elev - grid[r-1][c])             / ((lats[r] - lats[r-1]) * mLat)   : 0;
+      else                dzdy = (grid[r-1]?.[c] != null && grid[r+1]?.[c] != null)
+                                   ? (grid[r+1][c] - grid[r-1][c]) / ((lats[r+1] - lats[r-1]) * mLat)
+                                   : 0;
+
+      const grad    = Math.sqrt(dzdx * dzdx + dzdy * dzdy);
+      const slopePct = grad * 100;
+      const slopeDeg = Math.atan(grad) * 180 / Math.PI;
+
+      points.push({
+        lng: lngs[c], lat: lats[r],
+        elev, slopePct, slopeDeg,
+        interior: mask[r * N + c],
+      });
+    }
+  }
+
+  const interior = points.filter(p => p.interior);
+  if (interior.length === 0) return { points, interior: [], avgPct: 0, avgDeg: 0, maxPct: 0, maxDeg: 0, minElev: 0, maxElev: 0, pctOver30: 0 };
+
+  const avgPct   = interior.reduce((s, p) => s + p.slopePct, 0) / interior.length;
+  const avgDeg   = interior.reduce((s, p) => s + p.slopeDeg, 0) / interior.length;
+  const maxPct   = Math.max(...interior.map(p => p.slopePct));
+  const maxDeg   = Math.max(...interior.map(p => p.slopeDeg));
+  const elevs    = interior.map(p => p.elev).filter(v => v != null);
+  const minElev  = Math.min(...elevs);
+  const maxElev  = Math.max(...elevs);
+  const pctOver30 = (interior.filter(p => p.slopePct >= 30).length / interior.length) * 100;
+
+  return { points, interior, avgPct, avgDeg, maxPct, maxDeg, minElev, maxElev, pctOver30, n: interior.length };
+}
+
+function slopeBand(slopePct, profile) {
+  return profile.bands.find(b => slopePct >= b.min && slopePct < b.max) ?? profile.bands.at(-1);
+}
+
+function percentOverSlope(points, thresholdPct = 30) {
+  const n = points.length;
+  if (!n) return 0;
+  return (points.filter(p => p.slopePct >= thresholdPct).length / n) * 100;
+}
+
+function bandBreakdown(interior, profile) {
+  const n = interior.length;
+  return profile.bands.map(band => {
+    const count = interior.filter(p => p.slopePct >= band.min && p.slopePct < band.max).length;
+    return { ...band, count, pct: n ? (count / n) * 100 : 0 };
+  });
+}
+
+// ── UI rendering ───────────────────────────────────────────────────────────────
+function renderParcelInfo(parcel, profile, juris) {
+  const p = parcel.properties;
+  const pairs = [
+    ['GISLINK',  p.GISLINK  || p.GIS_LINK   || '—'],
+    ['Pin / ID', p.PIN      || p.PARCELID    || '—'],
+    ['Owner',    p.OWN1     || p.OWNER       || p.OWNERNAME || p.OWNER_NAME || '—'],
+    ['Address',  [p.SITEADD, p.SITECITY, p.SITESTATE].filter(Boolean).join(', ') || '—'],
+    ['Acres',    p.CALCACRES|| p.ACRES       || p.ACREAGE   || '—'],
+  ].filter(([, v]) => v !== '—');
+
+  document.getElementById('parcel-content').innerHTML =
+    pairs.map(([l, v]) =>
+      `<div class="info-row"><span class="ir-label">${l}</span><span class="ir-val">${v}</span></div>`
+    ).join('');
+}
+
+function renderJurisdiction(juris, profile) {
+  const badgeClass = {
+    gatlinburg:  'juris-gatlinburg',
+    sevierville: 'juris-sevierville',
+    sevierCounty:'juris-county',
+  }[juris.profileKey] ?? 'juris-unknown';
+
+  const fallbackNote = juris.fallback
+    ? `<div class="juris-fallback-note">Jurisdiction not confirmed — defaulting to Sevier County critical slope bands.</div>`
+    : '';
+
+  document.getElementById('juris-content').innerHTML = `
+    <span class="juris-badge ${badgeClass}">${juris.displayName}</span>
+    <div class="info-row"><span class="ir-label">Applied Profile</span><span class="ir-val">${profile.name}</span></div>
+    ${fallbackNote}
+  `;
+  show('panel-juris');
+}
+
+function renderMetrics(metrics, profile) {
+  const cards = [
+    ['Avg Slope',   `${metrics.avgPct.toFixed(1)}%`,  false],
+    ['Avg Slope',   `${metrics.avgDeg.toFixed(1)}°`,  false],
+    ['Max Slope',   `${metrics.maxPct.toFixed(1)}%`,  false],
+    ['Max Slope',   `${metrics.maxDeg.toFixed(1)}°`,  false],
+    ['Min Elev',    `${metrics.minElev.toFixed(0)} m`, false],
+    ['Max Elev',    `${metrics.maxElev.toFixed(0)} m`, false],
+    ['Samples',     `${metrics.n}`,                    false],
+    ['Over 30%',    `${metrics.pctOver30.toFixed(1)}%`, metrics.pctOver30 > 0],
+  ];
+  document.getElementById('metric-grid').innerHTML = cards
+    .map(([l, v, crit]) =>
+      `<div class="metric-card${crit ? ' critical' : ''}">
+        <div class="mc-val">${v}</div>
+        <div class="mc-label">${l}</div>
+       </div>`
+    ).join('');
+  show('panel-metrics');
+}
+
+function renderBands(metrics, profile) {
+  const breakdown = bandBreakdown(metrics.interior, profile);
+  const rows = breakdown.map(b => `
+    <div class="band-row">
+      <div class="band-header">
+        <span class="band-label">${b.label}</span>
+        <span class="band-pct">${b.pct.toFixed(1)}%</span>
+      </div>
+      <div class="band-track">
+        <div class="band-fill" style="width:${Math.min(b.pct, 100)}%;background:${b.color}"></div>
+      </div>
+    </div>
+  `).join('');
+
+  const triggerPct = percentOverSlope(metrics.interior, profile.criticalThreshold);
+  const callout = triggerPct > 0
+    ? `<div class="trigger-callout">
+        ${triggerPct.toFixed(1)}% of parcel is in ${profile.criticalLabel} (≥${profile.criticalThreshold}%).
+       </div>`
+    : '';
+
+  document.getElementById('bands-content').innerHTML = rows + callout;
+  show('panel-bands');
+}
+
+// ── Mapbox layer helpers ───────────────────────────────────────────────────────
+let clickMarker = null;
+
+function addClickMarker(lng, lat) {
+  if (clickMarker) clickMarker.remove();
+  clickMarker = new mapboxgl.Marker({ color: '#58a6ff', scale: 0.8 })
+    .setLngLat([lng, lat])
+    .addTo(map);
+}
+
+function highlightParcel(feature) {
+  const fc = { type: 'FeatureCollection', features: [feature] };
+  setGeoJSONSource('selected-parcel', fc, () => {
+    map.addLayer({ id: 'sel-fill',    type: 'fill', source: 'selected-parcel',
+      paint: { 'fill-color': '#58a6ff', 'fill-opacity': 0.12 } });
+    map.addLayer({ id: 'sel-outline', type: 'line', source: 'selected-parcel',
+      paint: { 'line-color': '#58a6ff', 'line-width': 2.5 } });
+  });
+  const bbox = featureBbox(feature);
+  map.fitBounds([[bbox[0], bbox[1]], [bbox[2], bbox[3]]], { padding: 60, duration: 900 });
+}
+
+function renderHeatmap(points) {
+  const fc = {
+    type: 'FeatureCollection',
+    features: points.filter(p => p.interior).map(p => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
+      properties: { slope: p.slopePct },
+    })),
+  };
+  setGeoJSONSource('slope-pts', fc, () => {
+    map.addLayer({
+      id: 'slope-heat',
+      type: 'heatmap',
+      source: 'slope-pts',
+      paint: {
+        'heatmap-weight':     ['interpolate', ['linear'], ['get', 'slope'], 0, 0, 50, 1],
+        'heatmap-intensity':  2.5,
+        'heatmap-radius':     30,
+        'heatmap-opacity':    0.82,
+        'heatmap-color': [
+          'interpolate', ['linear'], ['heatmap-density'],
+          0,    'rgba(35,134,54,0)',
+          0.2,  'rgba(35,134,54,0.85)',
+          0.45, 'rgba(210,153,34,0.85)',
+          0.7,  'rgba(218,54,51,0.9)',
+          1,    'rgba(110,27,27,0.95)',
+        ],
+      },
+    }, 'sel-fill');
+  });
+}
+
+// ── Generic source/layer utility ───────────────────────────────────────────────
+function setGeoJSONSource(id, data, addLayersFn) {
+  if (map.getSource(id)) {
+    map.getSource(id).setData(data);
+  } else {
+    map.addSource(id, { type: 'geojson', data });
+    if (addLayersFn) addLayersFn();
+  }
+}
+
+function clearSource(id) {
+  if (map.getSource(id))
+    map.getSource(id).setData({ type: 'FeatureCollection', features: [] });
+}
+
+// ── BBox from GeoJSON feature ──────────────────────────────────────────────────
+function featureBbox(feature) {
+  let [w, s, e, n] = [Infinity, Infinity, -Infinity, -Infinity];
+  const pt = ([lng, lat]) => {
+    if (lng < w) w = lng; if (lng > e) e = lng;
+    if (lat < s) s = lat; if (lat > n) n = lat;
+  };
+  const ring  = r  => r.forEach(pt);
+  const geom  = g  => {
+    if (!g) return;
+    if (g.type === 'Polygon')      g.coordinates.forEach(ring);
+    if (g.type === 'MultiPolygon') g.coordinates.forEach(p => p.forEach(ring));
+  };
+  geom(feature.geometry);
+  return [w, s, e, n];
+}
+
+// ── UI helpers ─────────────────────────────────────────────────────────────────
+function show(id)       { document.getElementById(id).style.display = ''; }
+function hideResultPanels() {
+  ['panel-juris','panel-metrics','panel-bands'].forEach(id => {
+    document.getElementById(id).style.display = 'none';
+  });
+  document.getElementById('parcel-content').innerHTML =
+    '<div class="click-hint"><strong>Analyzing…</strong></div>';
+}
+
+function log(msg, type = 'info') {
+  const el = document.getElementById('log');
+  const d  = document.createElement('div');
+  d.className = `log-item ${type}`;
+  d.innerHTML = `<div class="log-dot"></div><span>${msg}</span>`;
+  el.appendChild(d);
+  el.parentElement.scrollTop = el.parentElement.scrollHeight;
+}
+function clearLog() { document.getElementById('log').innerHTML = ''; }
+
+// ── Bootstrap ──────────────────────────────────────────────────────────────────
+(function() {
+  const saved = sessionStorage.getItem('truterra_pk');
+  if (saved && !saved.startsWith('sk.')) {
+    TOKEN = saved;
+    document.getElementById('tk-input').value = saved;
+    document.getElementById('tk-session').style.display = 'block';
+    launchApp();
+  }
+})();
+</script>
+</body>
+</html>
