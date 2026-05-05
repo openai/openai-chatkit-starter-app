@@ -38,7 +38,7 @@ class StarterChatServer(ChatKitServer[dict[str, Any]]):
     async def respond(
         self,
         thread: ThreadMetadata,
-        item: UserMessageItem | None,
+        input_user_message: UserMessageItem | None,
         context: dict[str, Any],
     ) -> AsyncIterator[ThreadStreamEvent]:
         items_page = await self.store.load_thread_items(
