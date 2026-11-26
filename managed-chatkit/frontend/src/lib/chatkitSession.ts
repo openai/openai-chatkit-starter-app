@@ -12,10 +12,9 @@ export const workflowId = (() => {
 export function createClientSecretFetcher(
   workflow: string,
   endpoint = "/api/create-session"
-) {
-  return async (currentSecret: string | null) => {
-    if (currentSecret) return currentSecret;
-
+): (currentSecret: string | null) => Promise<string> {
+  // ChatKit requests a new secret both on initial load and when one expires.
+  return async () => {
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
