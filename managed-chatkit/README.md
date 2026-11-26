@@ -17,6 +17,9 @@ What happens:
 - The backend exposes `/api/create-session`, exchanging your workflow id and
   `OPENAI_API_KEY` for a ChatKit client secret. The Vite dev server proxies
   `/api/*` to `127.0.0.1:8000`.
+- When ChatKit requests a refreshed client secret, the frontend calls the same
+  session endpoint again. The backend reuses the existing user ID from its
+  HTTP-only session cookie.
 
 ## Required environment
 
